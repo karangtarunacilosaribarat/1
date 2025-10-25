@@ -1,53 +1,60 @@
-'use client'
-import { useEffect, useState } from 'react'
-import GlassCard from './GlassCard'
-import { db } from '@/lib/firebase'
-import { collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc } from 'firebase/firestore'
+"use client";
+import { useEffect, useState } from "react";
+import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 
 export default function CRUDTable({ col, columns }){
-  const [rows, setRows] = useState([])
-  const [form, setForm] = useState({})
+  const [rows,setRows] = useState([]);
+  const [form,setForm] = useState({});
+  const [editing, setEditing] = useState(null);
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, col), (snap) => {
-      const arr = []
-      snap.forEach(d => arr.push({ id: d.id, ...d.data() }))
-      setRows(arr)
-    })
-    return () => unsub()
-  }, [col])
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db, col), snap => {
+      setRows(snap.docs.map(d=>({ id:d.id, ...d.data() })));
+    });
+    return ()=>unsub();
+  },[col]);
 
-  const onAdd = async (e) => {
-    e.preventDefault()
-    await addDoc(collection(db, col), { ...form, createdAt: serverTimestamp() })
-    setForm({})
-  }
+  const onSave = async (e)=>{
+    e.preventDefault();
+    if(editing){
+      await updateDoc(doc(db,col,editing), form);
+      setEditing(null);
+    }else{
+      await addDoc(collection(db,col), { ...form, createdAt: serverTimestamp() });
+    }
+    setForm({});
+  };
 
-  const onDelete = async (id) => { await deleteDoc(doc(db, col, id)) }
+  const onEdit = (r)=>{ setEditing(r.id); const copy = {}; columns.forEach(c=> copy[c.key] = r[c.key] || ""); setForm(copy); };
+  const onDelete = async(id)=>{ if(confirm("Hapus data?")) await deleteDoc(doc(db,col,id)); };
 
   return (
-    <GlassCard>
-      <form onSubmit={onAdd} className="grid md:grid-cols-3 gap-3 mb-4">
-        {columns.map(c => (
-          <input key={c.key} placeholder={c.label} value={form[c.key]||''}
-            onChange={e=>setForm({...form,[c.key]:e.target.value})}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 outline-none focus:ring-2 ring-white/20" />
-        ))}
-        <button className="bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl px-4 py-2">Tambah</button>
-      </form>
-      <div className="space-y-2">
-        {rows.map(r => (
-          <div key={r.id} className="flex items-center gap-3 bg-white/5 rounded-xl p-3 border border-white/10">
-            <div className="flex-1 text-sm">
-              {columns.map(c => (
-                <span key={c.key} className="mr-4"><span className="text-muted">{c.label}:</span> {String(r[c.key]||'')}</span>
-              ))}
+    <div className="glass card">
+      <form onSubmit={onSave} className="grid" style={{gap:12}}>
+        <div className="grid grid-2">
+          {columns.map(c=>(
+            <div key={c.key}>
+              <div className="small" style={{marginBottom:6}}>{c.label}</div>
+              <input className="input" value={form[c.key]||""} onChange={e=>setForm({...form,[c.key]:e.target.value})} />
             </div>
-            <button onClick={()=>onDelete(r.id)} className="text-red-300/90 hover:text-red-200 text-sm">Hapus</button>
+          ))}
+        </div>
+        <button className="btn" type="submit">{editing ? "Update" : "Tambah"}</button>
+      </form>
+
+      <div style={{marginTop:16}} className="grid" >
+        {rows.map(r=>(
+          <div key={r.id} className="glass card" style={{display:"grid", gap:8}}>
+            <div style={{fontWeight:700}}>{r[columns[0].key]||"(tanpa judul)"}</div>
+            <div className="small">{columns.slice(1).map(c => `${c.label}: ${r[c.key]||"-"}`).join(" • ")}</div>
+            <div style={{display:"flex", gap:8}}>
+              <button className="btn" onClick={()=>onEdit(r)} type="button">Edit</button>
+              <button className="btn" onClick={()=>onDelete(r.id)} type="button">Hapus</button>
+            </div>
           </div>
         ))}
-        {rows.length===0 && <div className="text-muted text-sm">Belum ada data.</div>}
       </div>
-    </GlassCard>
-  )
+    </div>
+  );
 }

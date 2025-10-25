@@ -1,33 +1,65 @@
-'use client'
-export const dynamic = 'force-dynamic'
-import { useAuthGuard } from '@/lib/authGuard'
-import GlassCard from '@/components/GlassCard'
-import Link from 'next/link'
-import { signOut } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
-export default function Page(){
-  const { ready, user, role } = useAuthGuard()
-  if(!ready) return <div className="glass p-6">Memuat...</div>
+"use client";
+import { useEffect, useState } from "react";
+import { signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "../../lib/firebase";
+import GlassCard from "../../components/GlassCard";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import UploadInput from "../../components/UploadInput";
+
+export const dynamic = "force-dynamic";
+
+export default function Dashboard(){
+  const [user,setUser] = useState(null);
+  const [role,setRole] = useState(null);
+  const [bg,setBg] = useState("");
+
+  useEffect(()=>{
+    const unsub = onAuthStateChanged(auth, async(u)=>{
+      setUser(u);
+      if(!u) return;
+      const snap = await getDoc(doc(db,"users",u.uid));
+      setRole(snap.exists()? (snap.data().role||"anggota") : "anggota");
+
+      const s = await getDoc(doc(db,"settings","general"));
+      if(s.exists()) setBg(s.data().bgUrl || "");
+    });
+    return ()=>unsub();
+  },[]);
+
+  const saveBg = async()=>{
+    await setDoc(doc(db,"settings","general"), { bgUrl:bg }, { merge:true });
+    alert("Background disimpan.");
+  };
+
+  const logout = async()=>{ await signOut(auth); window.location.href="/login"; };
+
   return (
-    <section className="space-y-4">
-      <GlassCard>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm text-white/60">Masuk sebagai</div>
-            <div className="font-semibold">{user?.displayName || user?.email}</div>
-            <div className="text-xs text-white/50">Role: {role}</div>
-          </div>
-          <button onClick={()=>signOut(auth)} className="text-sm underline">Keluar</button>
+    <div className="grid" style={{gap:16}}>
+      <GlassCard title="Dashboard">
+        <div className="small">Masuk sebagai: <b>{user?.email || "-"}</b> • Role: <b>{role||"-"}</b></div>
+        <div style={{marginTop:12, display:"flex", gap:8}}>
+          <a className="btn" href="/dashboard/berita">Berita</a>
+          <a className="btn" href="/dashboard/galeri">Galeri</a>
+          <a className="btn" href="/dashboard/kegiatan">Kegiatan</a>
+          <a className="btn" href="/dashboard/dokumen">Dokumen</a>
+          <a className="btn" href="/dashboard/kas">Kas</a>
+          <button className="btn" onClick={logout}>Keluar</button>
         </div>
       </GlassCard>
-      <div className="grid md:grid-cols-3 gap-3">
-        <Link href="/dashboard/berita" className="glass p-6">CRUD Berita</Link>
-        <Link href="/dashboard/kegiatan" className="glass p-6">CRUD Kegiatan</Link>
-        <Link href="/dashboard/umkm" className="glass p-6">CRUD UMKM</Link>
-        <Link href="/dashboard/galeri" className="glass p-6">CRUD Galeri</Link>
-        <Link href="/dashboard/kas" className="glass p-6">Kas</Link>
-        <Link href="/dashboard/settings" className="glass p-6">Settings</Link>
-      </div>
-    </section>
-  )
+
+      {role === "super_admin" && (
+        <GlassCard title="Pengaturan Portal (Super Admin)">
+          <div className="grid" style={{gap:12}}>
+            <div>
+              <div className="small" style={{marginBottom:6}}>Background URL</div>
+              <input className="input" value={bg} onChange={e=>setBg(e.target.value)} placeholder="https://..." />
+            </div>
+            <UploadInput onUploaded={(u)=>setBg(u)} folder="portal-bg" />
+            <button className="btn" onClick={saveBg}>Simpan Background</button>
+            {bg && <div className="small">Preview: <a href={bg} target="_blank" rel="noreferrer">Buka</a></div>}
+          </div>
+        </GlassCard>
+      )}
+    </div>
+  );
 }
