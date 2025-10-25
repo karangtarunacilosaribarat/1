@@ -1,0 +1,1 @@
+@tailwind base;@tailwind components;@tailwind utilities;:root{color-scheme:dark}html,body{background:#000}.glass{@apply bg-black/60 backdrop-blur-md border border-white/10 shadow-glass rounded-2xl}.text-muted{@apply text-white/60}
